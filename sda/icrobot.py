@@ -135,7 +135,7 @@ class Camera:
         gc.collect()
         time.sleep(0.2)
         if not self.camera_flag:
-            cam = esp_camera.init(0)
+            cam = esp_camera.init(0,xclk_freq = 16000000)
             if cam:
                 print("Camera ready")
                 self.camera_flag = True
@@ -1795,55 +1795,52 @@ class usart_receive:
         self.gun_num = 0
 
     def receive(self):
+        received_data = []
         while True:
             while True:
                 if uart.any():  # 判断接收缓冲区是否有数据
                     data = uart.read(1)  # 读取1字节数据
                     if data[0] == 0xAA:  # 如果包头正确
-                        self.buf[0] = data[0]
-                        self.idx = 1 # 将包头添加到数据列表
+                        received_data.append(data[0])  # 将包头添加到数据列表
                         break  # 跳出循环开始接收数据部分
-            while self.idx < 11:
+            while len(received_data) < 11:
                 if uart.any():  # 判断接收缓冲区是否有数据
-                    self.buf[self.idx] = uart.read(1)[0] # 读取1字节数据
-                    self.idx += 1
-            if self.buf[10] == 0xBB :
-                self.parse_packet()
-                self.idx = 0 
-    def parse_packet(self):
-        """解析预存缓冲区数据"""
-        if self.buf[2] == 0:
-            self.power_on = self.buf[3]
-            self.is_charging = self.buf[4]
-            self.power = self.buf[5]
-        elif self.buf[2] == 1:
-            self.lkey = self.buf[3]
-            self.rkey = self.buf[4]
-            self.privacy_switch = self.buf[5]
-        elif self.buf[2] == 2:
-            self.lmotor_mode = self.buf[3]
-            self.lmotor_speed = (self.buf[4] << 8) | self.buf[5]
-            self.lmotor_distance = (self.buf[6] << 8) | self.buf[7]
-        elif self.buf[2] == 3:
-            self.rmotor_mode = self.buf[3]
-            self.rmotor_speed = (self.buf[4] << 8) | self.buf[5]
-            self.rmotor_distance = (self.buf[6] << 8) | self.buf[7]
-        elif self.buf[2] == 4:
-            self.line_mode = self.buf[3]
-            self.line = self.buf[4:9]
-        elif self.buf[2] == 5:
-            self.gripper_port = self.buf[3]
-            self.gripper_addr = self.buf[4]
-            self.gripper = self.buf[5]
-        elif self.buf[2] == 6:
-            self.gun_port = self.buf[3]
-            self.gun_addr = self.buf[4]
-            self.gun = self.buf[5]
-            self.gun_num = self.buf[6]
-        elif self.buf[2] == 0xf0:
-            self.reply = 1
-        elif self.buf[2] == 0xf1:
-            self.reply = 0
+                    data = uart.read(1)  # 读取1字节数据
+                    received_data.append(data[0])
+            if received_data[-1] == 0xBB:
+                if received_data[2] == 0:
+                    self.power_on = received_data[3]
+                    self.is_charging = received_data[4]
+                    self.power = received_data[5]
+                elif received_data[2] == 1:
+                    self.lkey = received_data[3]
+                    self.rkey = received_data[4]
+                    self.privacy_switch = received_data[5]
+                elif received_data[2] == 2:
+                    self.lmotor_mode = received_data[3]
+                    self.lmotor_speed = (received_data[4] << 8) | received_data[5]
+                    self.lmotor_distance = (received_data[6] << 8) | received_data[7]
+                elif received_data[2] == 3:
+                    self.rmotor_mode = received_data[3]
+                    self.rmotor_speed = (received_data[4] << 8) | received_data[5]
+                    self.rmotor_distance = (received_data[6] << 8) | received_data[7]
+                elif received_data[2] == 4:
+                    self.line_mode = received_data[3]
+                    self.line = received_data[4:9]
+                elif received_data[2] == 5:
+                    self.gripper_port = received_data[3]
+                    self.gripper_addr = received_data[4]
+                    self.gripper = received_data[5]
+                elif received_data[2] == 6:
+                    self.gun_port = received_data[3]
+                    self.gun_addr = received_data[4]
+                    self.gun = received_data[5]
+                    self.gun_num = received_data[6]
+                elif received_data[2] == 0xf0:
+                    self.reply = 1
+                elif received_data[2] == 0xf1:
+                    self.reply = 0
+            received_data = []
 uart_receive = usart_receive()
 
 def start_receive():

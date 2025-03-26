@@ -1,4 +1,4 @@
-from machine import Pin,UART,unique_id
+from machine import UART,unique_id
 import esp_audio
 import esp_camera
 import esp_who
@@ -6,10 +6,8 @@ from microdot import Microdot
 import _thread
 import network
 import time
-import os
-import w25qxx
 import gc
-import json
+import ujson
 import socket
 import hashlib
 import binascii
@@ -17,9 +15,9 @@ import binascii
 uart = UART(2, 115200, rx=20, tx=19, bits=8, parity=None, stop=1)
 file_start_flag = False
 file_flag = True
-file_path = ['1.py','2.py','3.py','4.py','5.py','smartconfig.py']
+file_path = ['1.py','2.py','3.py','4.py','5.py','mode.py']
 file_num = 0
-
+mode_flag = False
 def send_command(command):
     """
     发送指令并等待应答
@@ -75,7 +73,7 @@ CORS_HEADERS = {
     'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-def video_stream_task():
+def video_stream_task(ip):
     app = Microdot()
     # 视频流
     @app.route('/video_feed', methods=['GET', 'OPTIONS'])
@@ -83,6 +81,7 @@ def video_stream_task():
         def stream():
             yield b'--frame\r\n'
             while True:
+                gc.collect()
                 frame = esp_camera.capture()
                 if frame is not None:
                     yield b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n--frame\r\n'
@@ -95,10 +94,10 @@ def video_stream_task():
         }
 
     # 启动视频流的Microdot应用
-    app.run(port=8081, debug=True) 
+    app.run(host = ip,port=8081, debug=True) 
 
-def video_start():
-    _thread.start_new_thread(video_stream_task, (), 10 * 1024)
+def video_start(ip):
+    _thread.start_new_thread(video_stream_task, (ip,), 6* 1024)
 
 class Power:
     def shuts_down(self):
@@ -426,7 +425,7 @@ class Motor:
                     break
         elif duration !=-1 and distance == -1:
             move[3] = 0x11
-            duration = duration * 10
+            duration = int(duration * 10)
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
             send_command(move)
@@ -581,7 +580,7 @@ class Display:
         点阵显示自定义数据
         """
         oled = [0xaa, 0x55, 0x03, 0x02,0x00]
-        oled = oled + image
+        oled.extend(image)
         oled[4] = mode
         send_command(oled)    
     def show_text(self,var,mode):
@@ -606,8 +605,9 @@ class Display:
         if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
             return 
         image = [0x00] * 24
-        image[pos_x] |= (1 << pos_y)
-        oled = oled + image
+        inverted_pos_y = 7 - pos_y  # 将 Y 坐标从顶部变到底部
+        image[pos_x] |= (1 << inverted_pos_y)
+        oled.extend(image)
         send_command(oled) 
     def add_pixel(self,pos_x,pos_y):
         """
@@ -617,7 +617,7 @@ class Display:
         if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
             return 
         image = [1,pos_x,pos_y]
-        oled = oled + image
+        oled.extend(image)
         send_command(oled) 
     def clear_pixel(self,pos_x,pos_y):
         """
@@ -627,7 +627,7 @@ class Display:
         if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
             return 
         image = [0,pos_x,pos_y]
-        oled = oled + image
+        oled.extend(image)
         send_command(oled) 
     def toggle_pixel(self,pos_x,pos_y):
         """
@@ -637,7 +637,7 @@ class Display:
         if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
             return 
         image = [2,pos_x,pos_y]
-        oled = oled + image
+        oled.extend(image)
         send_command(oled) 
     def clear(self):
         """
@@ -734,6 +734,7 @@ class Rgb_sensor:
         """
         color = [0xaa, 0x55, 0x02, 0x00]
         send_command(color)
+        uart_receive.line = [0,0,0,0,0]
     def read_line_value(self,num):
         """
         读取探头（num）的值
@@ -863,6 +864,7 @@ class AI:
                 self.color = result
                 self.color_x = result[0]
                 self.color_y = result[1]
+            time.sleep_ms(100)
         esp_who.ai_color_deinit()
                 
     def qr_recognition(self):
@@ -881,13 +883,15 @@ class AI:
         esp_who.ai_face_detection_init()
         print(2)
         while self.ai_start:
+            print(3)
             result = esp_who.ai_face_detection()
+            print(4)
             if result is None or len(result) < 5:
                 print("No result")
                 continue
             print(result)
             self.face_result = result
-            time.sleep_ms(500)
+            # time.sleep_ms(100)
         esp_who.ai_face_detection_deinit()           
 
     def set_model(self,model):
@@ -988,6 +992,7 @@ class ASR:
 
     def audio_thread(self):
         last_result = -1
+        microphone.open()
         while self.asr_start:
             result = esp_audio.ai_audio_result()
             if result != last_result:
@@ -995,9 +1000,8 @@ class ASR:
                 last_result = result
             time.sleep_ms(100)
         esp_audio.ai_audio_deinit()
-
+        microphone.close()
     def start(self):
-        microphone.open()
         if not self.asr_start:
             esp_audio.ai_audio_start()
             self.asr_start = True
@@ -1030,7 +1034,6 @@ def stop_execution():
         ai.ai_start = False
         power.set_status(255)
         camera.close()
-        microphone.close()
         gc.collect()
     if not file_flag:
         print("scratch停止")
@@ -1057,53 +1060,12 @@ class WiFi:
         self.password = ''
         self.ap_state = False
         self.ap_flag = False
-    def start_webserver(self):
-        app = Microdot()
-        # 设置配网页面
-        @app.route('/')
-        def index(request):
-            return '''<!doctype html>
-            <html>
-                <head>
-                    <meta charset="utf-8">
-                </head>
-                <body>
-                    <form action='/connect' method='post' accept-charset="UTF-8">
-                        WiFi名称: <input type='text' name='ssid'><br>
-                        密码: <input type='password' name='password'><br>
-                        <input type='submit' value='提交'>
-                    </form>
-                </body>
-            </html>
-            ''', 200, {
-                        'Content-Type': 'text/html',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-                    }
-
-        # 设置连接WiFi的路由
-        @app.route('/connect', methods=['POST'])
-        def connect(request):
-            self.ssid = request.form.get('ssid')
-            self.password = request.form.get('password')
-
-            if self.ssid and self.password:
-                # 保存WiFi配置信息
-                print(f"ssid：{self.ssid}，password:{self.password}")
-                wifi.save_wifi(self.ssid, self.password)
-                os.sync()
-                time.sleep(1)
-                self.sta_connecting = True
-                return "Configuration saved, connecting....", 200, CORS_HEADERS
-            return "Invalid input. Please try again.",400, CORS_HEADERS
-        
-        app.run(port=80, debug=True) 
-    
+        self.scan_flag = True
     def load_ap(self):
         """从文件加载保存的ap模式SSID"""
         try:
             with open(self.ap_config, "r") as f:
-                config = json.load(f)
+                config = ujson.load(f)
                 print(config.get('ssid'))
                 return config.get('ssid')
         except:
@@ -1113,36 +1075,10 @@ class WiFi:
         """保存ap模式到SSID到文件"""
         try:
             with open(self.ap_config, "w") as f:
-                json.dump({"ssid": ssid}, f)
+                ujson.dump({"ssid": ssid}, f)
             return True
         except Exception as e:
             print("保存SSID失败:", e)
-            return False
-
-    def load_wifi(self):
-        """从文件加载保存的Wi-Fi账号和密码"""
-        try:
-            with open(self.sta_config, "r") as f:
-                config = json.load(f)
-                print(config.get('wifi', []))
-                return config.get('wifi', [])
-        except Exception as e:
-            print("加载Wi-Fi信息失败:", e)
-            return []
-
-    def save_wifi(self, ssid, password):
-        """保存Wi-Fi账号和密码到文件"""
-        try:
-            wifi = self.load_wifi()  # 加载现有的Wi-Fi账号和密码列表
-            # 如果该Wi-Fi账号和密码组合不存在，则添加
-            if not any(cred['ssid'] == ssid and cred['password'] == password for cred in wifi):
-                wifi.append({"ssid": ssid, "password": password})
-                with open(self.sta_config, "w") as f:
-                    json.dump({"wifi": wifi}, f)
-            print("保存Wi-Fi信息成功")
-            return True
-        except Exception as e:
-            print("保存Wi-Fi信息失败:", e)
             return False
 
     def ap_task(self,ssid):
@@ -1230,71 +1166,6 @@ class WiFi:
             time.sleep(0.1)
         print("STA已断开")
         return True
-    
-    def start_ap_with_web(self):
-        self.start_ap()
-        _thread.start_new_thread(self.start_webserver, ())
-        while True:
-            if self.sta_connecting:
-                time.sleep(1)
-                self._disable_ap()
-                if not self.sta.active():
-                    self.sta.active(True)
-                    self.connect_sta(self.ssid, self.password)
-                    # 等待连接
-                    start = time.ticks_ms()
-                    while not self.is_connected():
-                        if time.ticks_diff(time.ticks_ms(), start) > 10000:  # 等待最多10秒
-                            print(f"连接Wi-Fi {self.ssid} 超时")
-                            break
-                        time.sleep(0.1)
-
-                    if self.is_connected():
-                        print(f"成功连接到Wi-Fi: {self.ssid}")
-                        return  # 成功连接后，直接返回
-                    else:
-                        print(f"无法连接到Wi-Fi: {self.ssid}")   
-                        print("请重新配网！")  
-                        self.start_ap()
-                        self.sta_connecting = False
-
-    def smart_config(self):
-        """连接已保存的Wi-Fi网络，若连接失败则启动AP模式"""
-        self._disable_ap()
-        if not self.sta.active():
-            self.sta.active(True)
-        wifi_list = self.load_wifi()  # 加载保存的Wi-Fi信息
-        if not wifi_list:
-            print("没有保存的Wi-Fi信息，进入AP模式")
-            time.sleep(1)
-            self.start_ap_with_web()
-            return True
-
-        networks = self.sta.scan()
-        available_ssids = [network[0].decode() for network in networks]  # 获取所有可用的SSID
-        for wifi in wifi_list:
-            ssid = wifi['ssid']
-            password = wifi['password']
-
-            if ssid in available_ssids:
-                print(f"找到保存的Wi-Fi：{ssid}，正在尝试连接...")
-                self.connect_sta(ssid, password)
-                # 等待连接
-                start = time.ticks_ms()
-                while not self.is_connected():
-                    if time.ticks_diff(time.ticks_ms(), start) > 10000:  # 等待最多10秒
-                        print(f"连接Wi-Fi {ssid} 超时")
-                        break
-                    time.sleep(0.1)
-
-                if self.is_connected():
-                    print(f"成功连接到Wi-Fi: {ssid}")
-                    return  # 成功连接后，直接返回
-                else:
-                    print(f"无法连接到Wi-Fi: {ssid}")
-        time.sleep(1)
-        self.start_ap_with_web()
-
     def _disable_ap(self):
         if self.ap.active():
             self.ap.active(False)
@@ -1310,21 +1181,59 @@ class WiFi:
             while self.sta.active():
                 time.sleep(0.1)
 
-    def clear_ap_config(self):
-        """清除保存的ap配置"""
-        try:
-            os.remove(self.ap_config)
-            print("ap配置已清除")
-        except:
-            pass
+    def scan_and_connect_wifi(self):
+        """扫描二维码并连接WiFi，连接失败或超时则退出"""
+        camera.open()
+        ai.set_model(ai.qr_recognition)
+        
+        speaker.play_music_until_done("/music/distribution_network.wav")
+        
+        while True:
+            if not self.scan_flag:  # 如果扫描被暂停，则跳过循环
+                time.sleep(0.5)
+                continue
+            else:
+                if ai.qr_isrecognized and ai.get_qr_information():
+                    qr_data = ai.get_qr_information()
 
-    def clear_sta_config(self):
-        """清除保存的sta配置"""
-        try:
-            os.remove(self.sta_config)
-            print("sta配置已清除")
-        except:
-            pass
+                    if qr_data.startswith("WIFI:"):
+                        speaker.play_music("/music/saomadi.wav")
+                        try:
+                            wifi_info = qr_data[5:-2]  # 去掉 "WIFI:" 和 结尾的 ";;"
+                            wifi_dict = dict(item.split(":") for item in wifi_info.split(";") if ":" in item)
+
+                            ssid = wifi_dict.get("S", "")
+                            password = wifi_dict.get("P", "")
+                            if ssid:
+                                if not self.sta.active():
+                                    self.sta.active(True)
+                                self.sta.connect(ssid, password)
+                                print(f"尝试连接: {ssid}, {password}")
+                                
+                                start_time = time.ticks_ms()  # 记录WiFi连接开始时间
+                                while not self.sta.isconnected():
+                                    if not self.scan_flag:  # 如果扫描被暂停，则跳过循环
+                                        continue
+                                    if time.ticks_diff(time.ticks_ms(), start_time) > 5000:  # 连接超时
+                                        print("WiFi 连接超时，重新扫描二维码...")
+                                        break  # 重新扫描
+
+                                if self.sta.isconnected():  # 连接成功才播放提示音
+                                    print("WiFi 连接成功！")
+                                    ai.close_model()
+                                    camera.close()
+                                    speaker.play_music("/music/connection_successful.wav")
+                                    host = wifi.information()[0]
+                                    video_start(host)
+                                    _thread.start_new_thread(scratch.start_receive,(host,),7*1024)
+                                    _thread.start_new_thread(scratch.start_send, (host,),4*1024)
+                                    _thread.start_new_thread(scratch.start_mode, (host,),4*1024)
+                                    _thread.start_new_thread(scratch.start_speaker, (host,),4*1024)
+                                    gc.collect()
+                                    break  # 连接成功，退出函数
+
+                        except Exception as e:
+                            print("error:", e)
 wifi = WiFi()
 
 class MyWebsocket:
@@ -1461,7 +1370,6 @@ class MyWebsocket:
 
 class Scratch:
     def __init__(self):
-        self.host = '192.168.4.1'
         self.speak_port = 8080
         self.send_port = 8082
         self.receive_port = 8083
@@ -1483,12 +1391,12 @@ class Scratch:
         }
         self.websocket = MyWebsocket()
 
-    def start_send(self):
+    def start_send(self,host):
         """启动 WebSocket 发送服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.send_port))
+        server_socket.bind((host, self.send_port))
         server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"WebSocket Server Send started on {self.host}:{self.send_port}")
+        print(f"WebSocket Server Send started on {host}:{self.send_port}")
         while True:
             client_socket, client_address = server_socket.accept()
             print(f"Send Connection from {client_address}")
@@ -1498,6 +1406,7 @@ class Scratch:
     def handle_client_send(self, client_socket):
         """处理 WebSocket 客户端连接"""
         global file_flag
+        microphone.open()
         # 握手过程
         self.websocket.handshake(client_socket)
         while True:
@@ -1508,25 +1417,26 @@ class Scratch:
                 vol = [asr.vol()]
                 num = [uart_receive.power,uart_receive.lmotor_speed,uart_receive.rmotor_speed,uart_receive.lmotor_distance,uart_receive.rmotor_distance]
                 data = uart_receive.line
-                device_status = keys + vol+ num + data
+                device_status = keys+vol+ num + data
                 # 发送设备状态
-                device_status_json = json.dumps(device_status)
+                device_status_json = ujson.dumps(device_status)
                 self.websocket.send(client_socket, device_status_json) 
-                time.sleep_ms(5)
+                time.sleep_ms(1)
             except Exception as e:
                 print(f"send Error: {e}")
                 break
+        microphone.close()
         gc.collect()
         # 关闭连接后清理资源
         client_socket.close()
         print("Connection closed. Ready for a new client.")
              
-    def start_receive(self):
+    def start_receive(self,host):
         """启动 WebSocket 接收服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.receive_port))
+        server_socket.bind((host, self.receive_port))
         server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"WebSocket Server Receive started on {self.host}:{self.receive_port}")
+        print(f"WebSocket Server Receive started on {host}:{self.receive_port}")
 
         while True:
             client_socket, client_address = server_socket.accept()
@@ -1563,7 +1473,7 @@ class Scratch:
                 else:
                     print("Client disconnected.")
                     break
-                time.sleep_ms(5)
+                time.sleep_ms(1)
             except OSError as e:
                 # MicroPython 中非阻塞模式无数据时的错误码通常是 11 (EAGAIN)
                 if e.args[0] == 11:  # 11 是 EAGAIN/EWOULDBLOCK 的常见错误码
@@ -1580,16 +1490,15 @@ class Scratch:
         client_socket.close()
         print("send closed. Ready for a new client.")
 
-    def start_mode(self):
+    def start_mode(self,host):
         """启动 WebSocket 设置服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.mode_port))
+        server_socket.bind((host, self.mode_port))
         server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"mode started on {self.host}:{self.mode_port}")
+        print(f"mode started on {host}:{self.mode_port}")
 
         while True:
             print("mode")
-            gc.collect()
             client_socket, client_address = server_socket.accept()
             print(f"mode Connection from {client_address}")
             self.handle_client_mode(client_socket)
@@ -1608,12 +1517,14 @@ class Scratch:
                 if message:
                     message = str(message)
                     if message == 'scratch':
+                        self.websocket.send(client_socket,'success')
                         file_flag = False
                         file_start_flag = False
                         self.websocket.send(client_socket,'success')
                         start_execution()
                         break
                     elif message == 'file':
+                        self.websocket.send(client_socket,'success')
                         file_flag = True
                         self.speaker_flag = False
                         self.websocket.send(client_socket,'success')
@@ -1650,18 +1561,18 @@ class Scratch:
         client_socket.close()
         print("mode closed. Ready for a new client.")
 
-    def start_speaker(self):
+    def start_speaker(self,host):
         """启动 WebSocket 设置服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.speak_port))
+        server_socket.bind((host, self.speak_port))
         server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"start_speaker started on {self.host}:{self.speak_port}")
+        print(f"start_speaker started on {host}:{self.speak_port}")
 
         while True:
             client_socket, client_address = server_socket.accept()
             print(f"start_speaker Connection from {client_address}")
             self.handle_client_speaker(client_socket)
-            time.sleep(0.5)         
+            time.sleep(0.5)   
     def handle_client_speaker(self, client_socket):
         """处理 WebSocket 客户端连接"""
         global file_flag
@@ -1700,7 +1611,7 @@ class Scratch:
     def process_message(self, ws, msg):
         """消息处理函数"""
         try:
-            data = json.loads(msg)
+            data = ujson.loads(msg)
             handler = self.cmd_handlers.get(data["command"], None)
             if handler:
                 handler(ws, data)
@@ -1795,7 +1706,7 @@ class Scratch:
         elif mode == 8:
             display.toggle_pixel(pos_x, pos_y)
         elif mode == 9:
-            display.clear()           
+            display.clear()              
     def handle_speaker(self, ws, data):
         """处理音乐控制"""
         vol = data["params"]["vol"]
@@ -1853,7 +1764,6 @@ scratch = Scratch()
 
 class usart_receive:
     def __init__(self):
-        self.buf = bytearray(11)
         self.idx = 0
 
         self.reply = -1
@@ -1887,55 +1797,52 @@ class usart_receive:
         self.gun_num = 0
 
     def receive(self):
+        received_data = []
         while True:
             while True:
                 if uart.any():  # 判断接收缓冲区是否有数据
                     data = uart.read(1)  # 读取1字节数据
                     if data[0] == 0xAA:  # 如果包头正确
-                        self.buf[0] = data[0]
-                        self.idx = 1 # 将包头添加到数据列表
+                        received_data.append(data[0])  # 将包头添加到数据列表
                         break  # 跳出循环开始接收数据部分
-            while self.idx < 11:
+            while len(received_data) < 11:
                 if uart.any():  # 判断接收缓冲区是否有数据
-                    self.buf[self.idx] = uart.read(1)[0] # 读取1字节数据
-                    self.idx += 1
-            if self.buf[10] == 0xBB :
-                self.parse_packet()
-                self.idx = 0 
-    def parse_packet(self):
-        """解析预存缓冲区数据"""
-        if self.buf[2] == 0:
-            self.power_on = self.buf[3]
-            self.is_charging = self.buf[4]
-            self.power = self.buf[5]
-        elif self.buf[2] == 1:
-            self.lkey = self.buf[3]
-            self.rkey = self.buf[4]
-            self.privacy_switch = self.buf[5]
-        elif self.buf[2] == 2:
-            self.lmotor_mode = self.buf[3]
-            self.lmotor_speed = (self.buf[4] << 8) | self.buf[5]
-            self.lmotor_distance = (self.buf[6] << 8) | self.buf[7]
-        elif self.buf[2] == 3:
-            self.rmotor_mode = self.buf[3]
-            self.rmotor_speed = (self.buf[4] << 8) | self.buf[5]
-            self.rmotor_distance = (self.buf[6] << 8) | self.buf[7]
-        elif self.buf[2] == 4:
-            self.line_mode = self.buf[3]
-            self.line = self.buf[4:9]
-        elif self.buf[2] == 5:
-            self.gripper_port = self.buf[3]
-            self.gripper_addr = self.buf[4]
-            self.gripper = self.buf[5]
-        elif self.buf[2] == 6:
-            self.gun_port = self.buf[3]
-            self.gun_addr = self.buf[4]
-            self.gun = self.buf[5]
-            self.gun_num = self.buf[6]
-        elif self.buf[2] == 0xf0:
-            self.reply = 1
-        elif self.buf[2] == 0xf1:
-            self.reply = 0
+                    data = uart.read(1)  # 读取1字节数据
+                    received_data.append(data[0])
+            if received_data[-1] == 0xBB:
+                if received_data[2] == 0:
+                    self.power_on = received_data[3]
+                    self.is_charging = received_data[4]
+                    self.power = received_data[5]
+                elif received_data[2] == 1:
+                    self.lkey = received_data[3]
+                    self.rkey = received_data[4]
+                    self.privacy_switch = received_data[5]
+                elif received_data[2] == 2:
+                    self.lmotor_mode = received_data[3]
+                    self.lmotor_speed = (received_data[4] << 8) | received_data[5]
+                    self.lmotor_distance = (received_data[6] << 8) | received_data[7]
+                elif received_data[2] == 3:
+                    self.rmotor_mode = received_data[3]
+                    self.rmotor_speed = (received_data[4] << 8) | received_data[5]
+                    self.rmotor_distance = (received_data[6] << 8) | received_data[7]
+                elif received_data[2] == 4:
+                    self.line_mode = received_data[3]
+                    self.line = received_data[4:9]
+                elif received_data[2] == 5:
+                    self.gripper_port = received_data[3]
+                    self.gripper_addr = received_data[4]
+                    self.gripper = received_data[5]
+                elif received_data[2] == 6:
+                    self.gun_port = received_data[3]
+                    self.gun_addr = received_data[4]
+                    self.gun = received_data[5]
+                    self.gun_num = received_data[6]
+                elif received_data[2] == 0xf0:
+                    self.reply = 1
+                elif received_data[2] == 0xf1:
+                    self.reply = 0
+            received_data = []
 uart_receive = usart_receive()
 
 def start_receive():

@@ -19,6 +19,92 @@ file_start_flag = False
 file_flag = True
 file_path = ['1.py','2.py','3.py','4.py','5.py','smartconfig.py']
 file_num = 0
+tail = [0x66,0xbb]
+
+class Expression:
+    def __init__(self):
+        self.wink_flag = False
+
+    def num(self,num):
+        data = [
+                [0,0,0,0,0,0,60,66,66,66,96,100,126,160,98,66,60,0,0,0,2,7,2,0],
+                [0,0,0,0,0,0,60,66,66,64,122,106,106,174,64,66,60,0,0,0,2,7,2,0],
+                [0,0,0,0,0,0,60,66,66,64,106,106,106,190,64,66,60,0,0,0,2,7,2,0],
+                [0,0,0,0,0,0,60,66,66,80,88,84,82,190,80,66,60,0,0,0,2,7,2,0],
+                [0,0,0,0,0,0,60,66,66,64,110,106,106,186,64,66,60,0,0,0,2,7,2,0],
+            ]
+        return data[num-1]
+    def starting_up(self):
+        
+        display.show_image([0,0,0,8,16,16,16,16,16,8,0,0,0,0,8,16,16,16,16,16,8,0,0,0],0)
+        time.sleep(0.2)
+        speaker.play_music("/music/starting_up.wav")
+        display.show_image([0,0,0,12,14,7,7,7,14,12,0,0,0,0,12,14,7,7,7,14,12,0,0,0],0)
+        time.sleep(0.2)
+        display.show_image([0,0,0,60,126,239,253,185,66,60,0,0,0,0,60,126,239,253,185,66,60,0,0,0],0)
+        time.sleep(0.4)
+        display.show_image([0,0,0,60,66,185,253,239,126,60,0,0,0,0,60,66,185,253,239,126,60,0,0,0],0)
+        time.sleep(0.4)
+        display.show_image([0,0,0,60,126,239,253,185,66,60,0,0,0,0,60,126,239,253,185,66,60,0,0,0],0)
+        time.sleep(0.4)
+        display.show_image([0,0,0,8,16,16,16,16,16,8,0,0,0,0,8,16,16,16,16,16,8,0,0,0],0)
+        time.sleep(0.2)
+        display.show_image([0,0,0,12,14,7,7,7,14,12,0,0,0,0,12,14,7,7,7,14,12,0,0,0],0)
+        time.sleep(0.06)
+        display.show_image([0,0,0,60,126,231,231,255,126,60,0,0,0,0,60,126,255,231,231,126,60,0,0,0],0)
+        time.sleep(0.16)
+        display.show_image([0,0,0,12,14,7,7,7,14,12,0,0,0,0,12,14,7,7,7,14,12,0,0,0],0)
+        time.sleep(0.06)
+        display.show_image([0,0,0,60,114,253,253,217,122,60,0,0,0,0,60,114,217,253,253,122,60,0,0,0],0)
+
+    def after_booting(self):
+        time.sleep(0.2)
+        motor.turn_left(30)
+        time.sleep(0.1)
+        motor.turn_right(30)
+        time.sleep(0.1)
+        motor.turn_left(30)
+        time.sleep(0.1)
+        motor.turn_right(30)
+        time.sleep(0.1)
+        motor.move_stop()
+        time.sleep(0.2)
+        gripper.open(2)
+        time.sleep(0.2)
+        gripper.close(2)
+        time.sleep(0.2)
+        gripper.open(2)
+        time.sleep(0.2)
+        gripper.close(2)
+        self.wink()
+
+    def wink(self):
+        if not self.wink_flag:
+            self.wink_flag = True
+            _thread.start_new_thread(self.wink_task,())
+
+    def wink_task(self):
+        while True:
+            if not self.wink_flag:
+                break
+            display.show_image([0,0,0,60,122,253,253,233,114,60,0,0,0,0,60,114,233,253,253,122,60,0,0,0],0)
+            time.sleep(3)
+            if not self.wink_flag:
+                break
+            display.show_image([0,0,0,48,112,192,192,192,112,48,0,0,0,0,48,112,192,192,192,112,48,0,0,0],0)
+            time.sleep(0.08)
+            if not self.wink_flag:
+                break
+            display.show_image([0,0,0,60,126,231,231,255,126,60,0,0,0,0,60,126,255,231,231,126,60,0,0,0],0)
+            time.sleep(0.1)
+            if not self.wink_flag:
+                break
+            display.show_image([0,0,0,48,112,192,192,192,112,48,0,0,0,0,48,112,192,192,192,112,48,0,0,0],0)
+            time.sleep(0.08)
+  
+    def execute_program(self):
+        display.clear()
+expression = Expression()
 
 def send_command(command):
     """
@@ -26,24 +112,9 @@ def send_command(command):
     如果 10ms 内没有收到正确的应答，则重新发送，最多重试 5 次
     """
     max_retries = 5  # 最大重试次数
-    total_len = len(command) + 4
-    buffer = bytearray(total_len)
-    
-    # 填充原始命令
-    for i in range(len(command)):
-        buffer[i] = command[i]
-    
-    # 计算并填充CRC
-    crc_val = crc(buffer[:len(command)])
-    buffer[len(command)] = crc_val & 0xFF
-    buffer[len(command)+1] = (crc_val >> 8) & 0xFF
-    
-    # 填充尾部
-    buffer[-2] = 0x66
-    buffer[-1] = 0xbb
 
     for attempt in range(max_retries):
-        uart.write(buffer)  # 发送指令
+        uart.write(bytearray(command))  # 发送指令
         start_time = time.ticks_ms()  # 记录起始时间
         while True:
             if uart_receive.reply == 1:  # 假设 1 表示成功应答
@@ -75,7 +146,7 @@ CORS_HEADERS = {
     'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-def video_stream_task():
+def video_stream_task(ip):
     app = Microdot()
     # 视频流
     @app.route('/video_feed', methods=['GET', 'OPTIONS'])
@@ -83,6 +154,7 @@ def video_stream_task():
         def stream():
             yield b'--frame\r\n'
             while True:
+                gc.collect()
                 frame = esp_camera.capture()
                 if frame is not None:
                     yield b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n--frame\r\n'
@@ -95,19 +167,19 @@ def video_stream_task():
         }
 
     # 启动视频流的Microdot应用
-    app.run(port=8081, debug=True) 
+    app.run(host = ip,port=8081, debug=True) 
 
-def video_start():
-    _thread.start_new_thread(video_stream_task, (), 10 * 1024)
+def video_start(ip):
+    _thread.start_new_thread(video_stream_task, (ip,), 10 * 1024)
 
 class Power:
     def shuts_down(self):
-        power = [0xaa, 0x55, 0x00,0xff,0x00]
-        send_command(power)  
-    def set_status(self,status):
-        power = [0xaa, 0x55, 0x00,0x00,0x00]
-        power[4] = status
-        send_command(power)  
+        power = [0xaa, 0x55, 0x00,0x00]
+        crc_value = crc(bytearray(power))
+        power.append(crc_value & 0xFF ) 
+        power.append((crc_value >> 8) & 0xFF) 
+        data = power + tail
+        send_command(data)  
     def value(self):
         return uart_receive.power
 power = Power()
@@ -115,6 +187,7 @@ power = Power()
 class Camera:
     def __init__(self):
         self.camera_flag = False
+
     def open(self):
         """
         打开摄像头
@@ -122,7 +195,7 @@ class Camera:
         gc.collect()
         time.sleep(0.1)
         if not self.camera_flag:
-            cam = esp_camera.init(0, format=esp_camera.RGB565,framesize = esp_camera.FRAME_QVGA,xclk_freq = 16000000)
+            cam = esp_camera.init(0, format=esp_camera.RGB565,framesize = esp_camera.FRAME_VGA,xclk_freq = 16000000)
             if cam:
                 print("Camera ready")
                 self.camera_flag = True
@@ -134,7 +207,7 @@ class Camera:
         打开摄像头
         """
         gc.collect()
-        time.sleep(0.2)
+        time.sleep(0.1)
         if not self.camera_flag:
             cam = esp_camera.init(0)
             if cam:
@@ -158,34 +231,26 @@ class Camera:
             if num == 0:
                 # esp_camera.framesize(esp_camera.FRAME_VGA)
                 esp_camera.deinit()
+                time.sleep(0.5)
                 gc.collect()
-                time.sleep(0.2)
-                gc.collect()
-                time.sleep(0.2)
                 cam = esp_camera.init(0,framesize = esp_camera.FRAME_VGA)
             elif num == 1:
                 # esp_camera.framesize(esp_camera.FRAME_SVGA) 
                 esp_camera.deinit()
+                time.sleep(0.5)
                 gc.collect()
-                time.sleep(0.2)
-                gc.collect()
-                time.sleep(0.2)
                 cam = esp_camera.init(0,framesize = esp_camera.FRAME_SVGA)
             elif num == 2:
                 # esp_camera.framesize(esp_camera.FRAME_XGA)
                 esp_camera.deinit()
+                time.sleep(0.5)
                 gc.collect()
-                time.sleep(0.2)
-                gc.collect()
-                time.sleep(0.2)
                 cam = esp_camera.init(0,framesize = esp_camera.FRAME_XGA)
             elif num == 3:
                 # esp_camera.framesize(esp_camera.FRAME_UXGA)  
                 esp_camera.deinit()
+                time.sleep(0.5)
                 gc.collect()
-                time.sleep(0.2)
-                gc.collect()
-                time.sleep(0.2)
                 cam = esp_camera.init(0,framesize = esp_camera.FRAME_UXGA)
 camera = Camera()
 
@@ -214,7 +279,11 @@ class Motor:
         停止运动
         """
         move = [0xaa, 0x55, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-        send_command(move)   
+        crc_value = crc(bytearray(move))
+        move.append(crc_value & 0xFF ) 
+        move.append((crc_value >> 8) & 0xFF)
+        data = move + tail
+        send_command(data)   
     def drive(self,left_speed,right_speed):
         """
         以（left_speed,right_speed）转动
@@ -232,12 +301,15 @@ class Motor:
             move[10] = right_speed&0xff
         else:
             move[10] = right_speed
-        send_command(move)
+        crc_value = crc(bytearray(move))
+        move.append(crc_value & 0xFF ) 
+        move.append((crc_value >> 8) & 0xFF)
+        data = move + tail
+        send_command(data)
     def leftmotor_drive(self,speed,duration=-1,distance=-1):
         """
         左轮以（）转动（）
         """
-        global file_flag,file_start_flag
         move = [0xaa, 0x55, 0x01, 0x00,0x01,0x00,0x00,0x00,0x00]
         speed = max(-100, min(100, int(speed)))
         if speed < 0:
@@ -249,14 +321,14 @@ class Motor:
             move[3] = 0x22
             move[7] = (distance >> 8) & 0xFF
             move[8] = distance & 0xFF
-            send_command(move)
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.lmotor_mode =2
             while True:
-                if uart_receive.lmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.lmotor_mode == 0 or scratch.scratch_stop == True:
                     break
                 time.sleep_ms(10)
         elif duration !=-1 and distance == -1:
@@ -264,24 +336,27 @@ class Motor:
             duration = duration * 10
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.lmotor_mode =1 
             while True:
-                if uart_receive.lmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.lmotor_mode == 0 or scratch.scratch_stop == True:
                     break
                 time.sleep_ms(100)
         elif duration == -1 and distance == -1:
             move[3] = 0x23
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
     def rightmotor_drive(self,speed,duration=-1,distance=-1):
         """
         右轮以（）转动（）
         """
-        global file_flag,file_start_flag
         move = [0xaa, 0x55, 0x01, 0x00,0x02,0x00,0x00,0x00,0x00]
         speed = max(-100, min(100, int(speed)))
         if speed < 0:
@@ -293,14 +368,14 @@ class Motor:
             move[3] = 0x22
             move[7] = (distance >> 8) & 0xFF
             move[8] = distance & 0xFF
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.rmotor_mode =2
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
                 time.sleep_ms(100)
         elif duration !=-1 and distance == -1:
@@ -308,26 +383,29 @@ class Motor:
             duration = duration * 10
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.rmotor_mode =1 
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
                 time.sleep_ms(100)
         elif duration == -1 and distance == -1:
             move[3] = 0x23
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
     def move_forward(self,speed,duration=-1,distance=-1):
         """
         机器人以(speed)速度前进(time)时间/秒
         机器人以(speed)速度前进(distance)距离/cm
         时间/距离均为None则一直前进
         """
-        global file_flag,file_start_flag
         move = [0xaa, 0x55, 0x01, 0x00,0x02,0x00,0x00,0x00,0x00]
         speed = max(0, min(100, int(speed)))
         move[6] = speed
@@ -335,39 +413,42 @@ class Motor:
             move[3] = 0x12
             move[7] = (distance >> 8) & 0xFF
             move[8] = distance & 0xFF
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.rmotor_mode = 2
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
         elif duration !=-1 and distance == -1:
             move[3] = 0x11
             duration = duration * 10
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.rmotor_mode = 1
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
         elif duration == -1 and distance == -1:
             move[3] = 0x13
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
     def move_backward(self,speed,duration=-1,distance=-1):
         """
         机器人以(speed)速度后退(time)时间/秒
         机器人以(speed)速度后退(distance)距离/cm
         时间/距离均为None则一直后退
         """
-        global file_flag,file_start_flag
         move = [0xaa, 0x55, 0x01, 0x00,0x04,0x00,0x00,0x00,0x00]
         speed = max(0, min(100, int(speed)))
         move[6] = speed
@@ -375,39 +456,42 @@ class Motor:
             move[3] = 0x12
             move[7] = (distance >> 8) & 0xFF
             move[8] = distance & 0xFF
-            send_command(move)
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)
             uart_receive.rmotor_mode = 2 
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
         elif duration !=-1 and distance == -1:
             move[3] = 0x11
             duration = duration * 10
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
             uart_receive.rmotor_mode = 1
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
-                    break      
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
+                    break       
         elif duration == -1 and distance == -1:
             move[3] = 0x13
-            send_command(move) 
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data) 
     def turn_left(self,speed,duration=-1,distance=-1):
         """
         机器人以(speed)速度左转(time)时间/秒
         机器人以(speed)速度左转(distance)距离/cm
         时间/距离均为None则一直左转
         """
-        global file_flag,file_start_flag
         move = [0xaa, 0x55, 0x01, 0x00,0x06,0x00,0x00,0x00,0x00]
         speed = max(0, min(100, int(speed)))
         move[6] = speed
@@ -415,39 +499,42 @@ class Motor:
             move[3] = 0x12
             move[7] = (distance >> 8) & 0xFF
             move[8] = distance & 0xFF
-            send_command(move)  
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)  
             uart_receive.rmotor_mode = 2
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
         elif duration !=-1 and distance == -1:
             move[3] = 0x11
             duration = duration * 10
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
-            send_command(move)
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)
             uart_receive.rmotor_mode = 1  
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
-                    break       
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
+                    break        
         elif duration == -1 and distance == -1:
             move[3] = 0x13
-            send_command(move)  
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)  
     def turn_right(self,speed,duration=-1,distance=-1):
         """
         机器人以(speed)速度右转(time)时间/秒
         机器人以(speed)速度右转(distance)距离/cm
         时间/距离均为None则一直右转
         """
-        global file_flag,file_start_flag
         move = [0xaa, 0x55, 0x01, 0x00,0x08,0x00,0x00,0x00,0x00]
         speed = max(0, min(100, int(speed)))
         move[6] = speed
@@ -455,40 +542,40 @@ class Motor:
             move[3] = 0x12
             move[7] = (distance >> 8) & 0xFF
             move[8] = distance & 0xFF
-            send_command(move)  
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)  
             uart_receive.rmotor_mode = 2
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
                     break
         elif duration !=-1 and distance == -1:
             move[3] = 0x11
             duration = duration * 10
             move[7] = (duration >> 8) & 0xFF
             move[8] = duration & 0xFF
-            send_command(move)  
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)  
             uart_receive.rmotor_mode = 1
             while True:
-                if uart_receive.rmotor_mode == 0:
-                    break
-                if scratch.scratch_stop == True:
-                    break
-                if file_flag == True and file_start_flag == False:
-                    break     
+                if uart_receive.rmotor_mode == 0 or scratch.scratch_stop == True:
+                    break      
         elif duration == -1 and distance == -1:
             move[3] = 0x13
-            send_command(move)  
-    def left_speed(self):
+            crc_value = crc(bytearray(move))
+            move.append(crc_value & 0xFF ) 
+            move.append((crc_value >> 8) & 0xFF)
+            data = move + tail
+            send_command(data)  
+    def speed(self):
         return uart_receive.lmotor_speed
-    def left_moving_distance(self):
+    def moving_distance(self):
         return uart_receive.lmotor_distance
-    def right_speed(self):
-        return uart_receive.rmotor_speed
-    def right_moving_distance(self):
-        return uart_receive.rmotor_distance
 motor = Motor()
          
 class Gripper:
@@ -498,7 +585,11 @@ class Gripper:
         """
         paw = [0xaa, 0x55, 0x04, 0x00,0x02]
         paw[3] = port
-        send_command(paw) 
+        crc_value = crc(bytearray(paw))
+        paw.append(crc_value & 0xFF ) 
+        paw.append((crc_value >> 8) & 0xFF)
+        data = paw + tail
+        send_command(data) 
         
     def close(self,port):
         """
@@ -506,7 +597,11 @@ class Gripper:
         """
         paw = [0xaa, 0x55, 0x04, 0x00,0x01]
         paw[3] = port
-        send_command(paw) 
+        crc_value = crc(bytearray(paw))
+        paw.append(crc_value & 0xFF ) 
+        paw.append((crc_value >> 8) & 0xFF)
+        data = paw + tail
+        send_command(data) 
     
     def open_until_done(self,port):
         """
@@ -514,7 +609,11 @@ class Gripper:
         """
         paw = [0xaa, 0x55, 0x04, 0x00,0x02]
         paw[3] = port
-        send_command(paw) 
+        crc_value = crc(bytearray(paw))
+        paw.append(crc_value & 0xFF ) 
+        paw.append((crc_value >> 8) & 0xFF)
+        data = paw + tail
+        send_command(data) 
         uart_receive.gripper = 1
         while True:
             if uart_receive.gripper == 0 and uart_receive.gripper_port ==port:
@@ -529,7 +628,11 @@ class Gripper:
         """
         paw = [0xaa, 0x55, 0x04, 0x00,0x01]
         paw[3] = port
-        send_command(paw) 
+        crc_value = crc(bytearray(paw))
+        paw.append(crc_value & 0xFF ) 
+        paw.append((crc_value >> 8) & 0xFF)
+        data = paw + tail
+        send_command(data) 
         uart_receive.gripper = 1
         while True:
             if uart_receive.gripper == 0 and uart_receive.gripper_port ==port:
@@ -547,7 +650,11 @@ class Gun:
         fire = [0xaa, 0x55, 0x05, 0x00,0x01,0x00]
         fire[3] = port
         fire[5] = num
-        send_command(fire) 
+        crc_value = crc(bytearray(fire))
+        fire.append(crc_value & 0xFF ) 
+        fire.append((crc_value >> 8) & 0xFF)
+        data = fire + tail
+        send_command(data) 
 
     def fire_until_done(self,port,num):
         """
@@ -556,7 +663,11 @@ class Gun:
         fire = [0xaa, 0x55, 0x05, 0x00,0x01,0x00]
         fire[3] = port
         fire[5] = num
-        send_command(fire) 
+        crc_value = crc(bytearray(fire))
+        fire.append(crc_value & 0xFF ) 
+        fire.append((crc_value >> 8) & 0xFF)
+        data = fire + tail
+        send_command(data) 
         uart_receive.gun = 1
         while True:
             if uart_receive.gun == 0 and uart_receive.gun_port ==port:
@@ -573,9 +684,14 @@ class Display:
         """
         亮度设置为[]
         """
+ 
         oled = [0xaa, 0x55, 0x03, 0x01,0x00]
         oled[4]=lum
-        send_command(oled)       
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data)    
     def show_image(self,image,mode):
         """
         点阵显示自定义数据
@@ -583,7 +699,11 @@ class Display:
         oled = [0xaa, 0x55, 0x03, 0x02,0x00]
         oled = oled + image
         oled[4] = mode
-        send_command(oled)    
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
     def show_text(self,var,mode):
         """
         点阵显示字符串
@@ -591,60 +711,90 @@ class Display:
         var_bytes = var.encode('utf-8')
         oled = [0xaa, 0x55, 0x03,0x03,0x00,0x00]
         oled[4] = mode
+        print(var_bytes)
         oled[5] = len(var_bytes)
         oled += list(var_bytes) 
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        print(data)
+        send_command(data) 
     def show_expression(self,num):
         oled = [0xaa, 0x55, 0x03,0x04,0x00]
         oled[4] = num
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
     def set_pixel(self,pos_x,pos_y):
         """
         点阵点亮指定点(只)
         """
         oled = [0xaa, 0x55, 0x03, 0x02,0x00]
-        if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
+        if not (0 <= pos_x < 8 and 0 <= pos_y < 24):
             return 
         image = [0x00] * 24
         image[pos_x] |= (1 << pos_y)
         oled = oled + image
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
     def add_pixel(self,pos_x,pos_y):
         """
         点阵点亮指定点(增加)
         """
         oled = [0xaa, 0x55, 0x03, 0x05]
-        if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
+        if not (0 <= pos_x < 8 and 0 <= pos_y < 24):
             return 
-        image = [1,pos_x,pos_y]
+        image = [pos_x,pos_y,1]
         oled = oled + image
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
     def clear_pixel(self,pos_x,pos_y):
         """
         点阵点亮指定点(删除)
         """
         oled = [0xaa, 0x55, 0x03, 0x05]
-        if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
+        if not (0 <= pos_x < 8 and 0 <= pos_y < 24):
             return 
-        image = [0,pos_x,pos_y]
+        image = [pos_x,pos_y,0]
         oled = oled + image
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
     def toggle_pixel(self,pos_x,pos_y):
         """
         点阵翻转指定点
         """
         oled = [0xaa, 0x55, 0x03, 0x05]
-        if not (0 <= pos_x < 24 and 0 <= pos_y < 8):
+        if not (0 <= pos_x < 8 and 0 <= pos_y < 24):
             return 
-        image = [2,pos_x,pos_y]
+        image = [pos_x,pos_y,2]
         oled = oled + image
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
     def clear(self):
         """
         熄屏
         """
         oled = [0xaa, 0x55, 0x03, 0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-        send_command(oled) 
+        crc_value = crc(bytearray(oled))
+        oled.append(crc_value & 0xFF ) 
+        oled.append((crc_value >> 8) & 0xFF)
+        data = oled + tail
+        send_command(data) 
 display = Display()        
 
 class Speaker:
@@ -706,12 +856,17 @@ speaker = Speaker()
 class Rgb_sensor: 
     def __init__(self):
         self.line_flag = False
+        self.line_tracked = False
     def start_grayscale_learning(self):
         """
         开始灰度学习
         """
         color = [0xaa, 0x55, 0x02, 0x04]
-        send_command(color) 
+        crc_value = crc(bytearray(color))
+        color.append(crc_value & 0xFF ) 
+        color.append((crc_value >> 8) & 0xFF)
+        data = color + tail
+        send_command(data) 
     def start_color_learning(self,num):
         """
         开始颜色学习
@@ -719,7 +874,11 @@ class Rgb_sensor:
         """
         color = [0xaa, 0x55, 0x02, 0x05,0x00]
         color[4] = num
-        send_command(color) 
+        crc_value = crc(bytearray(color))
+        color.append(crc_value & 0xFF ) 
+        color.append((crc_value >> 8) & 0xFF)
+        data = color + tail
+        send_command(data) 
     def set_line_mode(self,mode):
         """
         设置巡线传感器模式
@@ -727,27 +886,39 @@ class Rgb_sensor:
         """
         color = [0xaa, 0x55, 0x02, 0x00]
         color[3] = mode
-        send_command(color) 
+        crc_value = crc(bytearray(color))
+        color.append(crc_value & 0xFF ) 
+        color.append((crc_value >> 8) & 0xFF)
+        data = color + tail
+        send_command(data) 
     def close(self):
         """
         关闭巡线传感器
         """
         color = [0xaa, 0x55, 0x02, 0x00]
-        send_command(color)
+        crc_value = crc(bytearray(color))
+        color.append(crc_value & 0xFF ) 
+        color.append((crc_value >> 8) & 0xFF)
+        data = color + tail
+        send_command(data) 
     def read_line_value(self,num):
         """
         读取探头（num）的值
         """
-        time.sleep_ms(5)
         if num == 5:
             data = uart_receive.line
         else:
             data = uart_receive.line[num]
+        uart_receive.line = [0,0,0,0,0]
         return data
+
     def line_tracking_thread(self,speed):
         """
         自动巡线
         """
+        if self.line_tracked:
+            return
+        self.line_tracked = True
         BaseSpeed = speed
         if 0 < speed < 45:
             Kp = 0.13
@@ -765,9 +936,11 @@ class Rgb_sensor:
         Motor = 0
         error = 0
         while self.line_flag:
-            line = uart_receive.line
+            if scratch.scratch_stop == True:
+                break
+            line = rgb_sensor.read_line_value(5)
             if line:
-                error = line[4]*1.5+line[3]-line[1]-line[0]*1.5
+                error = line[0]*1.5+line[1]-line[3]-line[4]*1.5
                 dall = error-lasterror
                 Motor = Kp*error + dall*Kd
                 LSpeed = BaseSpeed - Motor
@@ -775,7 +948,7 @@ class Rgb_sensor:
                 lasterror = error
                 motor.drive(LSpeed, RSpeed)
         motor.drive(0, 0)
-        rgb_sensor.close()
+        self.line_tracked = False
     def line_tracking_until(self,speed,line_data):
         """
         自动巡线直到
@@ -797,8 +970,10 @@ class Rgb_sensor:
         Motor = 0
         error = 0
         rgb_sensor.set_line_mode(2)
-        while self.line_flag:
-            line = uart_receive.line
+        while True:
+            if scratch.scratch_stop == True:
+                break
+            line = rgb_sensor.read_line_value(5)
             if line:
                 bin_line = [1 if value <= 100 else 0 for value in line]
                 print(bin_line)
@@ -807,7 +982,7 @@ class Rgb_sensor:
                     rgb_sensor.close()
                     break
                 else:
-                    error = line[4]*1.5+line[3]-line[1]-line[0]*1.5
+                    error = line[0]*1.5+line[1]-line[3]-line[4]*1.5
                     dall = error-lasterror
                     Motor = Kp*error + dall*Kd
                     LSpeed = BaseSpeed - Motor
@@ -817,10 +992,11 @@ class Rgb_sensor:
     def line_tracking(self,speed):
         if not self.line_flag:
             self.line_flag = True
-            rgb_sensor.set_line_mode(2)
-            _thread.start_new_thread(rgb_sensor.line_tracking_thread, (speed,))
+        rgb_sensor.set_line_mode(2)
+        _thread.start_new_thread(rgb_sensor.line_tracking_thread, (speed,))
     def stop_line_tracking(self):
         self.line_flag = False
+        rgb_sensor.close()
 rgb_sensor = Rgb_sensor()    
 
 class Leftkey:
@@ -849,9 +1025,12 @@ class AI:
         self.color = [0,0]
 
     def color_tracking(self):
+        print(1)
         esp_who.ai_color_init()
+        print(2)
         while not self.ai_set:
             pass
+        print(3)
         while self.ai_start:
             if not self.ai_set:
                 continue
@@ -863,11 +1042,13 @@ class AI:
                 self.color = result
                 self.color_x = result[0]
                 self.color_y = result[1]
+            time.sleep_ms(100)
+        print(3)
         esp_who.ai_color_deinit()
                 
     def qr_recognition(self):
         esp_who.ai_qr_init()
-        while self.ai_start:   
+        while self.ai_start:
             result = esp_who.ai_qr()
             if result is not None:
                 self.qr_result = result
@@ -877,17 +1058,14 @@ class AI:
         esp_who.ai_qr_deinit()
         
     def face_detection(self):
-        print(1)
         esp_who.ai_face_detection_init()
-        print(2)
         while self.ai_start:
             result = esp_who.ai_face_detection()
             if result is None or len(result) < 5:
                 print("No result")
                 continue
-            print(result)
             self.face_result = result
-            time.sleep_ms(500)
+            time.sleep_ms(100)
         esp_who.ai_face_detection_deinit()           
 
     def set_model(self,model):
@@ -910,7 +1088,6 @@ class AI:
         """
         设置为追踪（）颜色
         """
-        time.sleep(1)
         self.ai_set = False
         print(color)
         esp_who.ai_color_set(color)
@@ -969,16 +1146,10 @@ class AI:
         """
         人脸位置
         """
-        if mode == "x":  
-            if self.face_result[0] > 0:  
-                return int((self.face_result[1]+self.face_result[2])/2)
-            else:
-                return 0
-        if mode == "y":  
-            if self.face_result[0] > 0:    
-                return int((self.face_result[3]+self.face_result[4])/2)
-            else:
-                return 0
+        if mode == "x":    
+            return int((self.face_result[1]+self.face_result[2])/2)
+        if mode == "y":    
+            return int((self.face_result[3]+self.face_result[4])/2)
 ai = AI() 
 
 class ASR:
@@ -1017,7 +1188,8 @@ asr = ASR()
 
 def start_execution():
     """开始执行程序"""
-    power.set_status(0)
+    expression.wink_flag = False
+    expression.execute_program()
 
 def stop_execution():
     """停止执行程序"""
@@ -1025,20 +1197,25 @@ def stop_execution():
     if file_flag:
         print("file停止")
         file_num = 0
-        speaker.music_flag = False
-        rgb_sensor.line_flag = False
-        ai.ai_start = False
-        power.set_status(255)
         camera.close()
         microphone.close()
+        time.sleep_ms(1)
+        motor.move_stop()
+        time.sleep_ms(1)
+        rgb_sensor.close()
+        time.sleep_ms(1)
+        expression.wink()
         gc.collect()
     if not file_flag:
         print("scratch停止")
-        speaker.music_flag = False
-        rgb_sensor.line_flag = False
         camera.close()
-        time.sleep_ms(1)
-        power.set_status(254)
+        microphone.close()
+        time.sleep_ms(5)
+        motor.move_stop()
+        time.sleep_ms(5)
+        rgb_sensor.close()
+        time.sleep_ms(5)
+        expression.execute_program()
         gc.collect()
 
 class WiFi:
@@ -1180,9 +1357,8 @@ class WiFi:
                 if disconnected_stations:
                     print("断开")
                     self.ap_state = False
-                    if not file_flag:
-                        file_flag = True
-                        stop_execution()
+                    file_flag = True
+                    stop_execution()
                     connected_stations.difference_update(disconnected_stations)
                     self.ap.set_hide_ssid(int(0))
                 time.sleep(1)  
@@ -1213,7 +1389,7 @@ class WiFi:
         if not self.sta.active():
             self.sta.active(True)
     
-        print(f"尝试连接: {ssid}")
+        print(f"尝试连接: {ssid},{password}")
         self.sta.connect(ssid, password)
 
     def is_connected(self):
@@ -1325,6 +1501,46 @@ class WiFi:
             print("sta配置已清除")
         except:
             pass
+
+  
+    def scan_and_connect_wifi(self):
+        """扫描二维码并连接WiFi，连接失败则重新扫描"""
+        camera.open()
+        ai.set_model(ai.qr_recognition)
+
+        speaker.play_music_until_done("/music/distribution_network.wav")
+        while True:
+            if ai.qr_isrecognized and ai.get_qr_information():
+                qr_data = ai.get_qr_information()
+
+                if qr_data.startswith("WIFI:"):
+                    speaker.play_music("/music/saomadi.wav")
+                    try:
+                        wifi_info = qr_data[5:-2]  # 去掉 "WIFI:" 和 结尾的 ";;"
+                        wifi_dict = dict(item.split(":") for item in wifi_info.split(";") if ":" in item)
+
+                        ssid = wifi_dict.get("S", "")
+                        password = wifi_dict.get("P", "")
+                        if ssid:
+                            if not self.sta.active():
+                                self.sta.active(True)
+                            self.sta.connect(ssid, password)
+                            print(f"尝试连接: {ssid},{password}")
+                            start_time = time.ticks_ms()  # 记录连接开始时间
+                            while not self.sta.isconnected():
+                                if time.ticks_diff(time.ticks_ms(), start_time) > 5000:  # 超时检测
+                                    print("WiFi 连接超时，重新扫描二维码...")
+                                    break  # 重新扫描
+
+                            if self.sta.isconnected():  # 只有成功连接才播放成功提示音
+                                print("WiFi 连接成功！")
+                                ai.close_model()
+                                camera.close()
+                                speaker.play_music("/music/connection_successful.wav")
+                                return True  # 连接成功，退出函数
+
+                    except Exception as e:
+                        print("解析WiFi二维码失败:", e)
 wifi = WiFi()
 
 class MyWebsocket:
@@ -1461,13 +1677,11 @@ class MyWebsocket:
 
 class Scratch:
     def __init__(self):
-        self.host = '192.168.4.1'
         self.speak_port = 8080
         self.send_port = 8082
         self.receive_port = 8083
         self.mode_port = 8084
         self.scratch_stop = False
-        self.speaker_flag = False
         self.cmd_handlers = {
             "camera": self.handle_camera,
             "micphone": self.handle_micphone,
@@ -1483,12 +1697,12 @@ class Scratch:
         }
         self.websocket = MyWebsocket()
 
-    def start_send(self):
+    def start_send(self,host):
         """启动 WebSocket 发送服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.send_port))
-        server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"WebSocket Server Send started on {self.host}:{self.send_port}")
+        server_socket.bind((host, self.send_port))
+        server_socket.listen(3)  # 最大连接数为 1，只允许一个客户端连接
+        print(f"WebSocket Server Send started on {host}:{self.send_port}")
         while True:
             client_socket, client_address = server_socket.accept()
             print(f"Send Connection from {client_address}")
@@ -1498,21 +1712,22 @@ class Scratch:
     def handle_client_send(self, client_socket):
         """处理 WebSocket 客户端连接"""
         global file_flag
+        microphone.open()
         # 握手过程
         self.websocket.handshake(client_socket)
         while True:
             try:
                 if file_flag:
-                    break 
+                    break  
                 keys = [uart_receive.lkey,uart_receive.rkey,uart_receive.privacy_switch]
                 vol = [asr.vol()]
-                num = [uart_receive.power,uart_receive.lmotor_speed,uart_receive.rmotor_speed,uart_receive.lmotor_distance,uart_receive.rmotor_distance]
+                num = [uart_receive.power,uart_receive.lmotor_speed,uart_receive.lmotor_distance]
                 data = uart_receive.line
-                device_status = keys + vol+ num + data
+                device_status = keys+vol+ num + data
                 # 发送设备状态
                 device_status_json = json.dumps(device_status)
                 self.websocket.send(client_socket, device_status_json) 
-                time.sleep_ms(5)
+                time.sleep_ms(1)
             except Exception as e:
                 print(f"send Error: {e}")
                 break
@@ -1521,12 +1736,12 @@ class Scratch:
         client_socket.close()
         print("Connection closed. Ready for a new client.")
              
-    def start_receive(self):
+    def start_receive(self,host):
         """启动 WebSocket 接收服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.receive_port))
-        server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"WebSocket Server Receive started on {self.host}:{self.receive_port}")
+        server_socket.bind((host, self.receive_port))
+        server_socket.listen(3)  # 最大连接数为 1，只允许一个客户端连接
+        print(f"WebSocket Server Receive started on {host}:{self.receive_port}")
 
         while True:
             client_socket, client_address = server_socket.accept()
@@ -1549,7 +1764,8 @@ class Scratch:
                 if self.scratch_stop == True:
                     break
                 if time.ticks_diff(time.ticks_ms(), last_recv_time) > 20000:
-                    print("Timeout: No data received for 20 seconds. Closing connection.")
+                    print("Timeout: No data received for 5 seconds. Closing connection.")
+                    file_flag = True
                     break
                 message = self.websocket.receive(client_socket)
                 if message:
@@ -1562,8 +1778,9 @@ class Scratch:
                     print("执行完毕")
                 else:
                     print("Client disconnected.")
+                    file_flag = True
                     break
-                time.sleep_ms(5)
+                time.sleep_ms(1)
             except OSError as e:
                 # MicroPython 中非阻塞模式无数据时的错误码通常是 11 (EAGAIN)
                 if e.args[0] == 11:  # 11 是 EAGAIN/EWOULDBLOCK 的常见错误码
@@ -1580,16 +1797,15 @@ class Scratch:
         client_socket.close()
         print("send closed. Ready for a new client.")
 
-    def start_mode(self):
+    def start_mode(self,host):
         """启动 WebSocket 设置服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.mode_port))
+        server_socket.bind((host, self.mode_port))
         server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"mode started on {self.host}:{self.mode_port}")
+        print(f"mode started on {host}:{self.mode_port}")
 
         while True:
             print("mode")
-            gc.collect()
             client_socket, client_address = server_socket.accept()
             print(f"mode Connection from {client_address}")
             self.handle_client_mode(client_socket)
@@ -1609,21 +1825,16 @@ class Scratch:
                     message = str(message)
                     if message == 'scratch':
                         file_flag = False
-                        file_start_flag = False
                         self.websocket.send(client_socket,'success')
                         start_execution()
                         break
                     elif message == 'file':
                         file_flag = True
-                        self.speaker_flag = False
                         self.websocket.send(client_socket,'success')
                         stop_execution()
                         break
                     elif message == 'stop':
                         self.scratch_stop = True
-                        speaker.music_flag = False
-                        rgb_sensor.line_flag = False
-                        self.speaker_flag = False
                         print("stop")
                         break
                     else:
@@ -1650,28 +1861,33 @@ class Scratch:
         client_socket.close()
         print("mode closed. Ready for a new client.")
 
-    def start_speaker(self):
+    def start_speaker(self,host):
         """启动 WebSocket 设置服务器"""
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.speak_port))
+        server_socket.bind((host, self.speak_port))
         server_socket.listen(1)  # 最大连接数为 1，只允许一个客户端连接
-        print(f"start_speaker started on {self.host}:{self.speak_port}")
+        print(f"start_speaker started on {host}:{self.speak_port}")
 
         while True:
             client_socket, client_address = server_socket.accept()
             print(f"start_speaker Connection from {client_address}")
             self.handle_client_speaker(client_socket)
-            time.sleep(0.5)         
+            time.sleep(0.5)
+            
     def handle_client_speaker(self, client_socket):
         """处理 WebSocket 客户端连接"""
         global file_flag
         # 握手过程
-        self.speaker_flag = True
+        self.scratch_stop == False
         self.websocket.handshake(client_socket)
         client_socket.setblocking(False)
         last_received_time = time.ticks_ms()
-        while self.speaker_flag:
+        while True:
             try:
+                if file_flag:
+                    break
+                if self.scratch_stop == True:
+                    break
                 if time.ticks_ms() - last_received_time > 3000:
                     print("No data received for 3 seconds, disconnecting...")
                     break
@@ -1696,7 +1912,8 @@ class Scratch:
 
         # 关闭连接后清理资源
         client_socket.close()
-        print("start_speaker closed. Ready for a new client.")  
+        print("start_speaker closed. Ready for a new client.")
+    
     def process_message(self, ws, msg):
         """消息处理函数"""
         try:
@@ -1706,6 +1923,7 @@ class Scratch:
                 handler(ws, data)
         except Exception as e:
             print(e)
+
     def handle_camera(self, ws, data):
         """处理摄像头控制"""
         mode = data["params"]["mode"]
@@ -1715,14 +1933,16 @@ class Scratch:
         elif mode == 1:
             camera.web_open()
         elif mode == 2:
-            camera.set_pixel(num)    
+            camera.set_pixel(num)
+    
     def handle_micphone(self, ws, data):
         """处理麦克风控制"""
         status = data["params"]["status"]
         if status == 0:
             microphone.close()
         elif status == 1:
-            microphone.open()            
+            microphone.open()
+            
     def handle_motor(self, ws, data):
         """处理电机控制"""
         mode = data["params"]["mode"]
@@ -1746,7 +1966,8 @@ class Scratch:
         elif mode == 7:
             motor.leftmotor_drive(speed, duration=mytime, distance=mydistance)
         elif mode == 8:
-            motor.rightmotor_drive(speed, duration=mytime, distance=mydistance)  
+            motor.rightmotor_drive(speed, duration=mytime, distance=mydistance)
+   
     def handle_gripper(self, ws, data):
         """处理爪子控制"""
         port = data["params"]["port"]
@@ -1759,6 +1980,7 @@ class Scratch:
             gripper.open_until_done(port)  
         elif mode == 4:
             gripper.close_until_done(port)   
+
     def handle_gun(self, ws, data):
         """处理炮台控制"""
         port = data["params"]["port"]
@@ -1767,7 +1989,8 @@ class Scratch:
         if mode == 1:
             gun.fire(port,num)
         elif mode == 2:
-            gun.fire_until_done(port,num)    
+            gun.fire_until_done(port,num)
+        
     def handle_display(self, ws, data):
         """处理显示屏控制"""
         mode = data["params"]["mode"]
@@ -1786,16 +2009,11 @@ class Scratch:
             display.show_text(var,way)
         elif mode == 4:
             display.show_expression(num)
-        elif mode == 6:
-            display.set_pixel(pos_x, pos_y)
         elif mode == 5:
-            display.add_pixel(pos_x, pos_y)
-        elif mode == 7:
-            display.clear_pixel(pos_x, pos_y)
-        elif mode == 8:
-            display.toggle_pixel(pos_x, pos_y)
-        elif mode == 9:
-            display.clear()           
+            display.set_pixel(pos_x, pos_y)
+        elif mode == 6:
+            display.clear() 
+            
     def handle_speaker(self, ws, data):
         """处理音乐控制"""
         vol = data["params"]["vol"]
@@ -1810,6 +2028,7 @@ class Scratch:
             speaker.play_music(name)
         elif mode ==4:   
             speaker.stop_sounds()
+
     def handle_rgb_sensor(self, ws, data):
         """处理巡线控制"""
         num = data["params"]["num"]
@@ -1823,23 +2042,25 @@ class Scratch:
             rgb_sensor.set_line_mode(num) 
         elif mode == 4:
             rgb_sensor.close()
+    
     def handle_line_tracking(self, ws, data):
         """处理自动巡线"""
         mode = data["params"]["mode"]
         speed = data["params"]["speed"]
         line = data["params"]["line"]
         if mode == 1:
-            rgb_sensor.line_flag = True
             rgb_sensor.line_tracking_until(speed,line)
         if mode == 2:
             rgb_sensor.line_tracking(speed)
         if mode == 3:
             rgb_sensor.stop_line_tracking()
+
     def update_ap(self, ws, data):
         """处理更改ap名称"""
         ssid = data["params"]["ssid"]
         gc.collect() 
         wifi.save_ap(ssid)
+
     def handle_upload_script(self, ws, data):
         """处理脚本下载"""
         name = data["params"]["name"]
@@ -1853,9 +2074,6 @@ scratch = Scratch()
 
 class usart_receive:
     def __init__(self):
-        self.buf = bytearray(11)
-        self.idx = 0
-
         self.reply = -1
 
         self.power_on = 0
@@ -1887,55 +2105,52 @@ class usart_receive:
         self.gun_num = 0
 
     def receive(self):
+        received_data = []
         while True:
             while True:
                 if uart.any():  # 判断接收缓冲区是否有数据
                     data = uart.read(1)  # 读取1字节数据
                     if data[0] == 0xAA:  # 如果包头正确
-                        self.buf[0] = data[0]
-                        self.idx = 1 # 将包头添加到数据列表
+                        received_data.append(data[0])  # 将包头添加到数据列表
                         break  # 跳出循环开始接收数据部分
-            while self.idx < 11:
+            while len(received_data) < 11:
                 if uart.any():  # 判断接收缓冲区是否有数据
-                    self.buf[self.idx] = uart.read(1)[0] # 读取1字节数据
-                    self.idx += 1
-            if self.buf[10] == 0xBB :
-                self.parse_packet()
-                self.idx = 0 
-    def parse_packet(self):
-        """解析预存缓冲区数据"""
-        if self.buf[2] == 0:
-            self.power_on = self.buf[3]
-            self.is_charging = self.buf[4]
-            self.power = self.buf[5]
-        elif self.buf[2] == 1:
-            self.lkey = self.buf[3]
-            self.rkey = self.buf[4]
-            self.privacy_switch = self.buf[5]
-        elif self.buf[2] == 2:
-            self.lmotor_mode = self.buf[3]
-            self.lmotor_speed = (self.buf[4] << 8) | self.buf[5]
-            self.lmotor_distance = (self.buf[6] << 8) | self.buf[7]
-        elif self.buf[2] == 3:
-            self.rmotor_mode = self.buf[3]
-            self.rmotor_speed = (self.buf[4] << 8) | self.buf[5]
-            self.rmotor_distance = (self.buf[6] << 8) | self.buf[7]
-        elif self.buf[2] == 4:
-            self.line_mode = self.buf[3]
-            self.line = self.buf[4:9]
-        elif self.buf[2] == 5:
-            self.gripper_port = self.buf[3]
-            self.gripper_addr = self.buf[4]
-            self.gripper = self.buf[5]
-        elif self.buf[2] == 6:
-            self.gun_port = self.buf[3]
-            self.gun_addr = self.buf[4]
-            self.gun = self.buf[5]
-            self.gun_num = self.buf[6]
-        elif self.buf[2] == 0xf0:
-            self.reply = 1
-        elif self.buf[2] == 0xf1:
-            self.reply = 0
+                    data = uart.read(1)  # 读取1字节数据
+                    received_data.append(data[0])
+            if received_data[-1] == 0xBB:
+                if received_data[2] == 0:
+                    self.power_on = received_data[3]
+                    self.is_charging = received_data[4]
+                    self.power = received_data[5]
+                elif received_data[2] == 1:
+                    self.lkey = received_data[3]
+                    self.rkey = received_data[4]
+                    self.privacy_switch = received_data[5]
+                elif received_data[2] == 2:
+                    self.lmotor_mode = received_data[3]
+                    self.lmotor_speed = (received_data[4] << 8) | received_data[5]
+                    self.lmotor_distance = (received_data[6] << 8) | received_data[7]
+                elif received_data[2] == 3:
+                    self.rmotor_mode = received_data[3]
+                    self.rmotor_speed = (received_data[4] << 8) | received_data[5]
+                    self.rmotor_distance = (received_data[6] << 8) | received_data[7]
+                elif received_data[2] == 4:
+                    self.line_mode = received_data[3]
+                    self.line = received_data[4:9]
+                elif received_data[2] == 5:
+                    self.gripper_port = received_data[3]
+                    self.gripper_addr = received_data[4]
+                    self.gripper = received_data[5]
+                elif received_data[2] == 6:
+                    self.gun_port = received_data[3]
+                    self.gun_addr = received_data[4]
+                    self.gun = received_data[5]
+                    self.gun_num = received_data[6]
+                elif received_data[2] == 0xf0:
+                    self.reply = 1
+                elif received_data[2] == 0xf1:
+                    self.reply = 0
+            received_data = []
 uart_receive = usart_receive()
 
 def start_receive():
